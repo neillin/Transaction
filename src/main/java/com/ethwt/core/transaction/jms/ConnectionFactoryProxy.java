@@ -1,0 +1,114 @@
+/*
+ * JBoss, Home of Professional Open Source.
+ * Copyright 2016, Red Hat, Inc., and individual contributors
+ * as indicated by the @author tags. See the copyright.txt file in the
+ * distribution for a full listing of individual contributors.
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License as
+ * published by the Free Software Foundation; either version 2.1 of
+ * the License, or (at your option) any later version.
+ *
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this software; if not, write to the Free
+ * Software Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA
+ * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
+ */
+package com.ethwt.core.transaction.jms;
+
+
+import javax.jms.Connection;
+import javax.jms.ConnectionFactory;
+import javax.jms.JMSContext;
+import javax.jms.JMSException;
+import javax.jms.XAConnectionFactory;
+import javax.jms.XAJMSContext;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Proxy connection factory to wrap around provided {@link XAConnectionFactory}.
+ *
+ * @author <a href="mailto:gytis@redhat.com">Gytis Trikleris</a>
+ */
+public class ConnectionFactoryProxy implements ConnectionFactory {
+	
+	private static Logger log = LoggerFactory.getLogger(ConnectionFactoryProxy.class);
+
+    private final XAConnectionFactory xaConnectionFactory;
+
+    private final TransactionHelper transactionHelper;
+
+    /**
+     * @param xaConnectionFactory factory to get XA connection instances, not null.
+     * @param transactionHelper utility to make transaction resources registration easier.
+     */
+    public ConnectionFactoryProxy(XAConnectionFactory xaConnectionFactory, TransactionHelper transactionHelper) {
+        this.xaConnectionFactory = xaConnectionFactory;
+        this.transactionHelper = transactionHelper;
+    }
+
+    /**
+     * Get XA connection from the provided factory and wrap it with {@link ConnectionProxy}.
+     *
+     * @return XA connection wrapped with {@link ConnectionProxy}.
+     * @throws JMSException if failure occurred creating XA connection.
+     */
+    @Override
+    public Connection createConnection() throws JMSException {
+        Connection connection = new ConnectionProxy(xaConnectionFactory.createXAConnection(), transactionHelper);
+
+        if (log.isTraceEnabled()) {
+            log.trace("Created new proxied connection: " + connection);
+        }
+
+        return connection;
+    }
+
+    /**
+     * Get XA connection from the provided factory with credentials and wrap it with {@link ConnectionProxy}.
+     * 
+     * @param userName
+     * @param password
+     * @return XA connection wrapped with {@link ConnectionProxy}.
+     * @throws JMSException if failure occurred creating XA connection.
+     */
+    @Override
+    public Connection createConnection(String userName, String password) throws JMSException {
+        Connection connection = new ConnectionProxy(xaConnectionFactory.createXAConnection(userName, password),
+                transactionHelper);
+
+        if (log.isTraceEnabled()) {
+            log.trace("Created new proxied connection: " + connection);
+        }
+
+        return connection;
+    }
+
+    @Override
+    public JMSContext createContext() {
+        return JMSContextProxy.wrapContext(xaConnectionFactory.createXAContext(), transactionHelper);
+    }
+
+    @Override
+    public JMSContext createContext(String userName, String password) {
+        return JMSContextProxy.wrapContext(xaConnectionFactory.createXAContext(userName, password), transactionHelper);
+    }
+
+    @Override
+    public JMSContext createContext(String userName, String password, int sessionMode) {
+        return JMSContextProxy.wrapContext((XAJMSContext) xaConnectionFactory.createXAContext(userName, password).createContext(sessionMode), transactionHelper);
+    }
+
+    @Override
+    public JMSContext createContext(int sessionMode) {
+        return JMSContextProxy.wrapContext((XAJMSContext) xaConnectionFactory.createXAContext().createContext(sessionMode), transactionHelper);
+    }
+
+}
